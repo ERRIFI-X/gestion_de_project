@@ -1,47 +1,59 @@
 <?php
-require_once __DIR__ . '/../routes/config.php';
+require_once __DIR__ . '/Database.php';
 
 class Sql
 {
+    private $pdo;
 
-    public function getAll($sql = '')
+    public function __construct()
     {
-        $conn = getPDOConnectionDB();
-        $stmt = $conn->query($sql);
-        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        return $results;
+        $this->pdo = Database::getInstance();
+    }
+
+    public function getAll($sql = '', $data = [])
+    {
+        if (empty($data)) {
+            $stmt = $this->pdo->query($sql);
+        } else {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($data);
+        }
+        return $stmt->fetchAll();
     }
 
     public function getId($sql = '', $data = [])
     {
-        $conn = getPDOConnectionDB();
-        $stmt = $conn->prepare($sql);
+        $stmt = $this->pdo->prepare($sql);
         $stmt->execute($data);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $user;
+        return $stmt->fetch();
+    }
+
+    public function create($sql = '', $data = [])
+    {
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($data);
+        return $this->pdo->lastInsertId(); // Return Last Insert ID instead of boolean for better flexibility
     }
 
     public function update($sql = '', $data = [])
     {
-        $conn = getPDOConnectionDB();
-        $stmt = $conn->prepare($sql);
+        $stmt = $this->pdo->prepare($sql);
         $stmt->execute($data);
-        if ($stmt->rowCount() > 0) {
-            return true;
-        } else {
-            return false;
-        }
+        return $stmt->rowCount() > 0;
     }
 
     public function delete($sql = '', $data = [])
     {
-        $conn = getPDOConnectionDB();
-        $stmt = $conn->prepare($sql);
+        $stmt = $this->pdo->prepare($sql);
         $stmt->execute($data);
-        if ($stmt->rowCount() > 0) {
-            return true;
-        } else {
-            return false;
-        }
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * Expose PDO instance for complex transactions
+     */
+    public function getPdo()
+    {
+        return $this->pdo;
     }
 }

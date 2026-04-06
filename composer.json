@@ -1,0 +1,12 @@
+{
+    "name": "errifi-x/gestion-de-project",
+    "description": "Project management system API",
+    "authors": [
+        {
+            "name": "ERRIFI-X"
+        }
+    ],
+    "require": {
+        "firebase/php-jwt": "^7.0"
+    }
+}

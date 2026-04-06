@@ -4,6 +4,7 @@ define('DB_HOST', 'localhost');
 define('DB_USER', 'root');
 define('DB_PASS', '');      
 define('DB_NAME', 'Gestion_de_project');
+define('JWT_SECRET', 'votre_cle_secrete_super_securisee_123'); // Change this in production!
 
 
 function getPDOConnectionDB($withDb = true) {

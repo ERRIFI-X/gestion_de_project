@@ -16,10 +16,10 @@ class Payments
         return $sql->getId("SELECT * FROM payments WHERE id = :id", ['id' => $id]);
     }
 
-    public function store($amount, $payment_date, $client_id)
+    public function store($project_id, $amount, $payment_date, $client_id)
     {
         $sql = new Sql();
-        return $sql->update("INSERT INTO payments (amount, payment_date, client_id) VALUES (:amount, :payment_date, :client_id)", ['amount' => $amount, 'payment_date' => $payment_date, 'client_id' => $client_id]);
+        return $sql->update("INSERT INTO payments (project_id, amount, payment_date, client_id) VALUES (:project_id, :amount, :payment_date, :client_id)", ['project_id' => $project_id, 'amount' => $amount, 'payment_date' => $payment_date, 'client_id' => $client_id]);
     }
 
     public function update($id, $amount, $payment_date, $client_id)

@@ -1,14 +1,36 @@
 <?php
+require_once __DIR__ . '/vendor/autoload.php';
+require_once __DIR__ . '/controllers/Middleware.php';
 
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
 header('Content-Type: application/json');
+
+// Handle preflight requests for CORS
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
 
 $page = isset($_GET['page']) ? $_GET['page'] : '';
 
+// 1. Unprotected / Public Routes
+if ($page === 'database') {
+    require_once './models/migration.php';
+    echo createTables();
+    exit;
+}
+
+if ($page === 'auth') {
+    require_once './routes/Auth.php';
+    exit;
+}
+
+// 2. Protected Routes (Require JWT)
+$userData = Middleware::authenticate();
+
 switch ($page) {
-    case 'database':
-        require_once './models/migration.php';
-        echo createTables();
-        break;
     case 'clients':
         require_once './routes/Clients.php';
         break;
@@ -18,13 +40,23 @@ switch ($page) {
     case 'tasks':
         require_once './routes/Tasks.php';
         break;
-    case 'tache':
-        require_once './routes/Tache.php';
+    case 'dashboard':
+        require_once './routes/Dashboard.php';
+        break;
+    case 'payments':
+        require_once './routes/Payments.php';
+        break;
+    case 'invoices':
+        require_once './routes/invoices.php';
+        break;
+    case 'system':
+        require_once './routes/System.php';
         break;
     default:
-        echo json_encode(['message' => 'Bienvenue sur l\'API de gestion de projet']);
+        echo json_encode([
+            'success' => true,
+            'message' => 'Project Management API',
+            'user' => $userData['username'] ?? 'Anonymous'
+        ]);
         break;
-}
-
-
-?>
+}
