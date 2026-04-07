@@ -49,6 +49,9 @@ switch ($page) {
     case 'invoices':
         require_once './routes/invoices.php';
         break;
+    case 'servers':
+        require_once './routes/Servers.php';
+        break;
     case 'system':
         require_once './routes/System.php';
         break;
