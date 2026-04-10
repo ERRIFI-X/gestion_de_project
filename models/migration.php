@@ -32,14 +32,15 @@ function createTables(): string
         $conn = getPDOConnectionDB();
 
         // DROP TABLES IN REVERSE ORDER TO AVOID FK ISSUES
+        $conn->exec("SET FOREIGN_KEY_CHECKS = 0;");
         $tablesToDrop = [
             'notifications', 'activity_logs', 'payments', 'invoices', 
-            'tasks', 'servers', 'project_services', 'projects', 
-            'pack_services', 'services', 'pack_templates', 'clients', 'admin'
+            'tasks', 'services', 'projects', 'clients', 'admin'
         ];
         foreach ($tablesToDrop as $table) {
             $conn->exec("DROP TABLE IF EXISTS $table");
         }
+        $conn->exec("SET FOREIGN_KEY_CHECKS = 1;");
         addStatus("success", "cleanup", "Existing tables dropped for clean migration.");
 
         // 1. Admin Table
@@ -65,37 +66,7 @@ function createTables(): string
         ) ENGINE=InnoDB");
         addStatus("success", "clients", "Table 'clients' OK.");
 
-        // 3. Pack Templates
-        $conn->exec("CREATE TABLE IF NOT EXISTS pack_templates (
-            id         INT AUTO_INCREMENT PRIMARY KEY,
-            name       VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB");
-        addStatus("success", "pack_templates", "Table 'pack_templates' OK.");
-
-        $conn->exec("CREATE TABLE IF NOT EXISTS services (
-            id         INT AUTO_INCREMENT PRIMARY KEY,
-            name       VARCHAR(255) NOT NULL,
-            price      DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-            description TEXT,
-            hours      DECIMAL(8,2)  NOT NULL DEFAULT 0.00,
-            cost       DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB");
-        addStatus("success", "services", "Table 'services' OK.");
-
-        // 5. Pack Services (Pivot Table Template)
-        $conn->exec("CREATE TABLE IF NOT EXISTS pack_services (
-            id               INT AUTO_INCREMENT PRIMARY KEY,
-            pack_template_id INT NOT NULL,
-            service_id       INT NOT NULL,
-            FOREIGN KEY (pack_template_id) REFERENCES pack_templates(id) ON DELETE CASCADE,
-            FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
-            UNIQUE KEY uq_pack_service (pack_template_id, service_id)
-        ) ENGINE=InnoDB");
-        addStatus("success", "pack_services", "Table 'pack_services' OK.");
-
-        // 6. Projects
+        // 3. Projects
         $conn->exec("CREATE TABLE IF NOT EXISTS projects (
             id               INT AUTO_INCREMENT PRIMARY KEY,
             name             VARCHAR(255) NOT NULL,
@@ -106,71 +77,52 @@ function createTables(): string
             total_cost       DECIMAL(10,2) NOT NULL DEFAULT 0.00,
             remaining_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
             client_id        INT NOT NULL,
-            pack_id          INT NULL,
             created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT,
-            FOREIGN KEY (pack_id) REFERENCES pack_templates(id) ON DELETE SET NULL,
             INDEX (status)
         ) ENGINE=InnoDB");
         addStatus("success", "projects", "Table 'projects' OK.");
 
-        
-        // 8. Servers
-        $conn->exec("CREATE TABLE IF NOT EXISTS servers (
-            id          INT AUTO_INCREMENT PRIMARY KEY,
-            project_id  INT NOT NULL,
-            name        VARCHAR(100),
-            description TEXT,
-            total_hours DECIMAL(8,2) NOT NULL DEFAULT 0.00,
-            total_cost  DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-            created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-            INDEX (project_id)
-        ) ENGINE=InnoDB");
-        addStatus("success", "servers", "Table 'servers' OK.");
-        // 7. Project Services
-        $conn->exec("CREATE TABLE IF NOT EXISTS project_services (
+        // 4. Services (New Table)
+        $conn->exec("CREATE TABLE IF NOT EXISTS services (
             id               INT AUTO_INCREMENT PRIMARY KEY,
             project_id       INT NOT NULL,
-            service_id       INT NOT NULL,
-            price            DECIMAL(10,2) NOT NULL,
+            name             VARCHAR(255) NOT NULL,
+            price            DECIMAL(10,2) NOT NULL DEFAULT 0.00,
             status           ENUM('pending', 'in_progress', 'completed') NOT NULL DEFAULT 'pending',
             created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-            FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
-            UNIQUE KEY uq_project_service (project_id, service_id)
+            INDEX (project_id)
         ) ENGINE=InnoDB");
-        addStatus("success", "project_services", "Table 'project_services' OK.");
+        addStatus("success", "services", "Table 'services' OK.");
 
-        // 9. Tasks (Single Level)
+        // 5. Tasks (Linked to Service)
         $conn->exec("CREATE TABLE IF NOT EXISTS tasks (
             id                 INT AUTO_INCREMENT PRIMARY KEY,
-            project_services_id INT NOT NULL,
+            service_id         INT NOT NULL,
             title              VARCHAR(255) NOT NULL,
             description        TEXT,
             start_date         DATE,
             end_date           DATE,
             priority           ENUM('low', 'medium', 'high', 'urgent') NOT NULL DEFAULT 'medium',
-            status             ENUM('todo', 'in_progress', 'done') NOT NULL DEFAULT 'todo',
+            status             ENUM('todo', 'in_progress', 'done', 'overdue') NOT NULL DEFAULT 'todo',
             total_hours        DECIMAL(8,2)  NOT NULL DEFAULT 0.00,
             total_cost         DECIMAL(10,2) NOT NULL DEFAULT 0.00,
             created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            FOREIGN KEY (project_services_id) REFERENCES project_services(id) ON DELETE CASCADE,
-            INDEX (project_services_id)
+            FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
+            INDEX (service_id)
         ) ENGINE=InnoDB");
         addStatus("success", "tasks", "Table 'tasks' OK.");
 
-        // FINANCIAL & STATUS TRIGGERS: TASKS -> PROJECT_SERVICES
+        // FINANCIAL & STATUS TRIGGERS: TASKS -> SERVICES
         foreach (['INSERT', 'UPDATE', 'DELETE'] as $event) {
             $ref    = ($event === 'DELETE') ? 'OLD' : 'NEW';
             $suffix = strtolower($event);
             
             $conn->exec("DROP TRIGGER IF EXISTS after_{$suffix}_task_financials");
-            // NOTE: Changing DELIMITER isn't needed with PDO exec() because it sends the whole statement at once.
             $conn->exec("
                 CREATE TRIGGER after_{$suffix}_task_financials
                 AFTER {$event} ON tasks
@@ -181,15 +133,15 @@ function createTables(): string
                     DECLARE v_done_tasks INT;
                     DECLARE v_in_progress_tasks INT;
 
-                    -- Update project_service cost based on tasks
-                    UPDATE project_services 
-                    SET price = (SELECT IFNULL(SUM(total_cost), 0) FROM tasks WHERE project_services_id = {$ref}.project_services_id)
-                    WHERE id = {$ref}.project_services_id;
+                    -- Update parent Service price based on tasks
+                    UPDATE services 
+                    SET price = (SELECT IFNULL(SUM(total_cost), 0) FROM tasks WHERE service_id = {$ref}.service_id)
+                    WHERE id = {$ref}.service_id;
 
                     -- Calc statuses
-                    SELECT COUNT(*) INTO v_total_tasks FROM tasks WHERE project_services_id = {$ref}.project_services_id;
-                    SELECT COUNT(*) INTO v_done_tasks FROM tasks WHERE project_services_id = {$ref}.project_services_id AND status = 'done';
-                    SELECT COUNT(*) INTO v_in_progress_tasks FROM tasks WHERE project_services_id = {$ref}.project_services_id AND status = 'in_progress';
+                    SELECT COUNT(*) INTO v_total_tasks FROM tasks WHERE service_id = {$ref}.service_id;
+                    SELECT COUNT(*) INTO v_done_tasks FROM tasks WHERE service_id = {$ref}.service_id AND status = 'done';
+                    SELECT COUNT(*) INTO v_in_progress_tasks FROM tasks WHERE service_id = {$ref}.service_id AND status = 'in_progress';
 
                     IF v_total_tasks = 0 THEN
                         SET v_status = 'pending';
@@ -201,57 +153,60 @@ function createTables(): string
                         SET v_status = 'pending';
                     END IF;
 
-                    UPDATE project_services SET status = v_status WHERE id = {$ref}.project_services_id;
+                    UPDATE services SET status = v_status WHERE id = {$ref}.service_id;
                 END
             ");
         }
-        addStatus("success", "triggers_tasks", "Advanced triggers on tasks (price and status) OK.");
+        addStatus("success", "triggers_tasks", "Financial and status triggers on tasks (cascading to services) OK.");
 
-        // FINANCIAL & STATUS TRIGGERS: PROJECT_SERVICES -> PROJECTS
-        foreach (['UPDATE'] as $event) {
-            $ref    = 'NEW';
+        // FINANCIAL TRIGGERS: SERVICES -> PROJECTS
+        foreach (['INSERT', 'UPDATE', 'DELETE'] as $event) {
+            $ref    = ($event === 'DELETE') ? 'OLD' : 'NEW';
             $suffix = strtolower($event);
+            
             $conn->exec("DROP TRIGGER IF EXISTS after_{$suffix}_service_financials");
             $conn->exec("
                 CREATE TRIGGER after_{$suffix}_service_financials
-                AFTER {$event} ON project_services
+                AFTER {$event} ON services
                 FOR EACH ROW
                 BEGIN
-                    DECLARE v_status ENUM('pending', 'in_progress', 'completed', 'cancelled');
-                    DECLARE v_total_srv INT;
-                    DECLARE v_comp_srv INT;
-                    DECLARE v_prog_srv INT;
-
-                    -- Update total cost for the project
+                    -- Update project totals based on services
                     UPDATE projects SET
-                        total_cost = (SELECT IFNULL(SUM(price), 0) FROM project_services WHERE project_id = NEW.project_id),
-                        remaining_amount = (SELECT IFNULL(SUM(price), 0) FROM project_services WHERE project_id = NEW.project_id) 
-                                         - (SELECT IFNULL(SUM(amount), 0) FROM payments WHERE project_id = NEW.project_id)
-                    WHERE id = NEW.project_id;
+                        total_cost       = (SELECT IFNULL(SUM(price), 0) FROM services WHERE project_id = {$ref}.project_id),
+                        remaining_amount = (SELECT IFNULL(SUM(price), 0) FROM services WHERE project_id = {$ref}.project_id)
+                                         - (SELECT IFNULL(SUM(amount), 0) FROM payments WHERE project_id = {$ref}.project_id)
+                    WHERE id = {$ref}.project_id;
 
                     -- Update project status based on services
-                    SELECT COUNT(*) INTO v_total_srv FROM project_services WHERE project_id = NEW.project_id;
-                    SELECT COUNT(*) INTO v_comp_srv FROM project_services WHERE project_id = NEW.project_id AND status = 'completed';
-                    SELECT COUNT(*) INTO v_prog_srv FROM project_services WHERE project_id = NEW.project_id AND status = 'in_progress';
+                    BEGIN
+                        DECLARE v_proj_status ENUM('pending', 'in_progress', 'completed', 'cancelled');
+                        DECLARE v_total_srv INT;
+                        DECLARE v_comp_srv INT;
+                        DECLARE v_prog_srv INT;
 
-                    -- Only auto-update if not cancelled
-                    IF (SELECT status FROM projects WHERE id = NEW.project_id) != 'cancelled' THEN
-                        IF v_total_srv = 0 THEN
-                            SET v_status = 'pending';
-                        ELSEIF v_total_srv = v_comp_srv THEN
-                            SET v_status = 'completed';
-                        ELSEIF v_prog_srv > 0 OR v_comp_srv > 0 THEN
-                            SET v_status = 'in_progress';
-                        ELSE
-                            SET v_status = 'pending';
+                        SELECT COUNT(*) INTO v_total_srv FROM services WHERE project_id = {$ref}.project_id;
+                        SELECT COUNT(*) INTO v_comp_srv FROM services WHERE project_id = {$ref}.project_id AND status = 'completed';
+                        SELECT COUNT(*) INTO v_prog_srv FROM services WHERE project_id = {$ref}.project_id AND status = 'in_progress';
+
+                        IF (SELECT status FROM projects WHERE id = {$ref}.project_id) != 'cancelled' THEN
+                            IF v_total_srv = 0 THEN
+                                SET v_proj_status = 'pending';
+                            ELSEIF v_total_srv = v_comp_srv THEN
+                                SET v_proj_status = 'completed';
+                            ELSEIF v_prog_srv > 0 OR v_comp_srv > 0 THEN
+                                SET v_proj_status = 'in_progress';
+                            ELSE
+                                SET v_proj_status = 'pending';
+                            END IF;
+
+                            UPDATE projects SET status = v_proj_status WHERE id = {$ref}.project_id;
                         END IF;
-
-                        UPDATE projects SET status = v_status WHERE id = NEW.project_id;
-                    END IF;
+                    END;
                 END
             ");
         }
-        addStatus("success", "triggers_services", "Advanced triggers on project_services (cost and status) OK.");
+        addStatus("success", "triggers_services", "Financial triggers on services (cascading to projects) OK.");
+
 
         // 9. Invoices
         $conn->exec("CREATE TABLE IF NOT EXISTS invoices (
@@ -359,14 +314,4 @@ function createTables(): string
     }
 
     return json_encode($status, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-}
-
-// Logic to check if migration should run
-if ((isset($_GET['page']) && $_GET['page'] === 'database') || (basename($_SERVER['PHP_SELF']) == 'migration.php')) {
-    $result = createTables();
-    if (php_sapi_name() === 'cli') {
-        echo $result;
-    } else {
-        echo "<pre>" . $result . "</pre>";
-    }
 }

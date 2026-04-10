@@ -27,6 +27,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'ID is required.']);
     }
+} else if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
+    if (isset($_GET['id'])) {
+        $data = json_decode(file_get_contents("php://input"), true);
+        $result = $financeController->updatePayment((int)$_GET['id'], $data);
+        if (!$result['success']) http_response_code(400);
+        echo json_encode($result);
+    } else {
+        http_response_code(400);
+        echo json_encode(['error' => 'ID is required for UPDATE']);
+    }
 } else {
     http_response_code(405);
     echo json_encode(['error' => 'Method Not Allowed']);

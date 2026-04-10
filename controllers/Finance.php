@@ -26,7 +26,24 @@ class Finance
 
     public function getInvoice($id)
     {
-        return $this->sql->getId("SELECT * FROM invoices WHERE id = :id", ['id' => $id]);
+        $invoice = $this->sql->getId("
+            SELECT i.*, 
+                   c.name as client_name, c.email as client_email, c.phone as client_phone, c.address as client_address, 
+                   p.name as project_name 
+            FROM invoices i 
+            JOIN clients c ON i.client_id = c.id 
+            JOIN projects p ON i.project_id = p.id
+            WHERE i.id = :id
+        ", ['id' => $id]);
+
+        if ($invoice) {
+            $invoice['services'] = $this->sql->getAll(
+                "SELECT * FROM services WHERE project_id = :project_id", 
+                ['project_id' => $invoice['project_id']]
+            );
+        }
+
+        return $invoice;
     }
 
     public function createInvoice($data)
@@ -44,6 +61,29 @@ class Finance
             ]
         );
         return ['success' => (bool)$id, 'id' => $id];
+    }
+
+    public function updateInvoice($id, $data)
+    {
+        $result = $this->sql->update(
+            "UPDATE invoices SET project_id=:project_id, client_id=:client_id, amount=:amount, due_date=:due_date, status=:status, notes=:notes WHERE id=:id",
+            [
+                ':project_id' => (int)$data['project_id'],
+                ':client_id' => (int)$data['client_id'],
+                ':amount' => (float)$data['amount'],
+                ':due_date' => $data['due_date'] ?? null,
+                ':status' => $data['status'] ?? 'draft',
+                ':notes' => htmlspecialchars($data['notes'] ?? ''),
+                ':id' => $id
+            ]
+        );
+        return ['success' => $result];
+    }
+
+    public function deleteInvoice($id)
+    {
+        $result = $this->sql->delete("DELETE FROM invoices WHERE id = :id", [':id' => $id]);
+        return ['success' => $result];
     }
 
     // --- Payments Methods ---
@@ -110,6 +150,25 @@ class Finance
             $pdo->rollBack();
             return ['success' => false, 'error' => $e->getMessage()];
         }
+    }
+
+    public function updatePayment($id, $data)
+    {
+        // Triggers in the database will automatically re-calculate the project remaining amount upon UPDATE
+        $result = $this->sql->update(
+            "UPDATE payments SET project_id=:project_id, client_id=:client_id, invoice_id=:invoice_id, amount=:amount, payment_date=:payment_date, payment_method=:payment_method, notes=:notes WHERE id=:id",
+            [
+                ':project_id' => (int)$data['project_id'],
+                ':client_id' => (int)$data['client_id'],
+                ':invoice_id' => !empty($data['invoice_id']) ? (int)$data['invoice_id'] : null,
+                ':amount' => (float)$data['amount'],
+                ':payment_date' => $data['payment_date'] ?? date('Y-m-d'),
+                ':payment_method' => $data['payment_method'] ?? 'transfer',
+                ':notes' => htmlspecialchars($data['notes'] ?? ''),
+                ':id' => $id
+            ]
+        );
+        return ['success' => $result];
     }
 
     public function deletePayment($id)

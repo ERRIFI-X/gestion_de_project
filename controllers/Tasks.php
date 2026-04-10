@@ -11,13 +11,36 @@ class Tasks
         $this->sql = new Sql();
     }
 
-    public function getAll($project_id = null)
+    public function autoUpdateStatuses()
     {
+        // 1. Update tasks to 'in_progress' if start_date has arrived and status is 'todo'
+        $this->sql->update("
+            UPDATE tasks 
+            SET status = 'in_progress' 
+            WHERE status = 'todo' 
+            AND start_date IS NOT NULL 
+            AND start_date <= CURRENT_DATE()
+        ");
+
+        // 2. Update tasks to 'overdue' if end_date has passed and they are not 'done'
+        $this->sql->update("
+            UPDATE tasks 
+            SET status = 'overdue' 
+            WHERE status != 'done' 
+            AND end_date IS NOT NULL 
+            AND end_date < CURRENT_DATE()
+        ");
+    }
+
+    public function getAll($service_id = null)
+    {
+        $this->autoUpdateStatuses();
+
         $query = "SELECT * FROM tasks";
         $params = [];
-        if ($project_id) {
-            $query .= " WHERE project_id = :project_id";
-            $params = [':project_id' => $project_id];
+        if ($service_id) {
+            $query .= " WHERE service_id = :service_id";
+            $params = [':service_id' => $service_id];
         }
         return $this->sql->getAll($query, $params);
     }
@@ -30,10 +53,10 @@ class Tasks
     public function store($data)
     {
         $id = $this->sql->create(
-            "INSERT INTO tasks (project_id, title, description, start_date, end_date, priority, status, total_hours, total_cost) 
-             VALUES (:project_id, :title, :description, :start_date, :end_date, :priority, :status, :total_hours, :total_cost)",
+            "INSERT INTO tasks (service_id, title, description, start_date, end_date, priority, status, total_hours, total_cost) 
+             VALUES (:service_id, :title, :description, :start_date, :end_date, :priority, :status, :total_hours, :total_cost)",
             [
-                ':project_id' => (int)$data['project_id'],
+                ':service_id' => (int)$data['service_id'],
                 ':title' => htmlspecialchars($data['title']),
                 ':description' => htmlspecialchars($data['description'] ?? ''),
                 ':start_date' => $data['start_date'] ?? null,

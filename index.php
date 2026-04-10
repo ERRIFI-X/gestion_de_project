@@ -18,7 +18,14 @@ $page = isset($_GET['page']) ? $_GET['page'] : '';
 // 1. Unprotected / Public Routes
 if ($page === 'database') {
     require_once './models/migration.php';
-    echo createTables();
+    $result = createTables();
+    if (php_sapi_name() === 'cli') {
+        echo $result;
+    } else {
+        // Change header for HTML output
+        header('Content-Type: text/html');
+        echo "<pre>" . $result . "</pre>";
+    }
     exit;
 }
 
@@ -48,6 +55,9 @@ switch ($page) {
         break;
     case 'invoices':
         require_once './routes/invoices.php';
+        break;
+    case 'notifications':
+        require_once './routes/Notifications.php';
         break;
     case 'servers':
         require_once './routes/Servers.php';

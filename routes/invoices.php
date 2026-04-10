@@ -21,6 +21,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         http_response_code(400);
     }
     echo json_encode($result);
+} else if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
+    if (isset($_GET['id'])) {
+        $data = json_decode(file_get_contents("php://input"), true);
+        $result = $financeController->updateInvoice((int)$_GET['id'], $data);
+        if (!$result['success']) http_response_code(400);
+        echo json_encode($result);
+    } else {
+        http_response_code(400);
+        echo json_encode(['error' => 'ID is required for UPDATE']);
+    }
+} else if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+    if (isset($_GET['id'])) {
+        $result = $financeController->deleteInvoice((int)$_GET['id']);
+        if (!$result['success']) http_response_code(400);
+        echo json_encode($result);
+    } else {
+        http_response_code(400);
+        echo json_encode(['error' => 'ID is required for DELETE']);
+    }
 } else {
     http_response_code(405);
     echo json_encode(['error' => 'Method Not Allowed']);

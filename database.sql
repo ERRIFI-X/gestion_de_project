@@ -22,32 +22,7 @@ CREATE TABLE IF NOT EXISTS clients (
     INDEX (email)
 ) ENGINE=InnoDB;
 
--- 3. Pack Templates
-CREATE TABLE IF NOT EXISTS pack_templates (
-    id         INT AUTO_INCREMENT PRIMARY KEY,
-    name       VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB;
-
--- 4. Services
-CREATE TABLE IF NOT EXISTS services (
-    id         INT AUTO_INCREMENT PRIMARY KEY,
-    name       VARCHAR(255) NOT NULL,
-    price      DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB;
-
--- 5. Pack Services (Pivot Table)
-CREATE TABLE IF NOT EXISTS pack_services (
-    id               INT AUTO_INCREMENT PRIMARY KEY,
-    pack_template_id INT NOT NULL,
-    service_id       INT NOT NULL,
-    FOREIGN KEY (pack_template_id) REFERENCES pack_templates(id) ON DELETE CASCADE,
-    FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
-    UNIQUE KEY uq_pack_service (pack_template_id, service_id)
-) ENGINE=InnoDB;
-
--- 6. Projects
+-- 3. Projects
 CREATE TABLE IF NOT EXISTS projects (
     id               INT AUTO_INCREMENT PRIMARY KEY,
     name             VARCHAR(255) NOT NULL,
@@ -58,30 +33,14 @@ CREATE TABLE IF NOT EXISTS projects (
     total_cost       DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     remaining_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     client_id        INT NOT NULL,
-    pack_template_id INT NULL,
     created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT,
-    FOREIGN KEY (pack_template_id) REFERENCES pack_templates(id) ON DELETE SET NULL,
     INDEX (client_id),
     INDEX (status)
 ) ENGINE=InnoDB;
 
--- 7. Project Services
-CREATE TABLE IF NOT EXISTS project_services (
-    id               INT AUTO_INCREMENT PRIMARY KEY,
-    project_id       INT NOT NULL,
-    service_id       INT NOT NULL,
-    price            DECIMAL(10,2) NOT NULL,
-    status           ENUM('pending', 'in_progress', 'completed') NOT NULL DEFAULT 'pending',
-    created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-    FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
-    UNIQUE KEY uq_project_service (project_id, service_id)
-) ENGINE=InnoDB;
-
--- 8. Tasks (Single Level)
+-- 4. Tasks
 CREATE TABLE IF NOT EXISTS tasks (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     project_id  INT NOT NULL,
@@ -95,11 +54,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     total_cost  DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    project_service_id INT NULL,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-    FOREIGN KEY (project_service_id) REFERENCES project_services(id) ON DELETE SET NULL,
-    INDEX (project_id),
-    INDEX (project_service_id)
+    INDEX (project_id)
 ) ENGINE=InnoDB;
 
 -- FINANCIAL TRIGGERS ON TASKS -> PROJECTS
@@ -140,7 +96,7 @@ END$$
 
 DELIMITER ;
 
--- 9. Invoices
+-- 5. Invoices
 CREATE TABLE IF NOT EXISTS invoices (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     project_id  INT NOT NULL,
@@ -157,7 +113,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     INDEX (client_id)
 ) ENGINE=InnoDB;
 
--- 10. Payments
+-- 6. Payments
 CREATE TABLE IF NOT EXISTS payments (
     id             INT AUTO_INCREMENT PRIMARY KEY,
     project_id     INT NOT NULL,
@@ -207,7 +163,7 @@ END$$
 
 DELIMITER ;
 
--- 11. Activity Logs (Polymorphic)
+-- 7. Activity Logs (Polymorphic)
 CREATE TABLE IF NOT EXISTS activity_logs (
     id         INT AUTO_INCREMENT PRIMARY KEY,
     user_id    INT NOT NULL,
@@ -222,7 +178,7 @@ CREATE TABLE IF NOT EXISTS activity_logs (
     INDEX (user_id)
 ) ENGINE=InnoDB;
 
--- 12. Notifications
+-- 8. Notifications
 CREATE TABLE IF NOT EXISTS notifications (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     user_id     INT NOT NULL,
@@ -234,7 +190,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     INDEX (is_read)
 ) ENGINE=InnoDB;
 
--- 13. Servers
+-- 9. Servers
 CREATE TABLE IF NOT EXISTS servers (
     id INT AUTO_INCREMENT PRIMARY KEY,
     project_id INT NOT NULL,
