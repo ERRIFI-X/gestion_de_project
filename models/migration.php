@@ -34,7 +34,7 @@ function createTables(): string
         // DROP TABLES IN REVERSE ORDER TO AVOID FK ISSUES
         $conn->exec("SET FOREIGN_KEY_CHECKS = 0;");
         $tablesToDrop = [
-            'notifications', 'activity_logs', 'payments', 'invoices', 
+            'pack_services', 'packs', 'notifications', 'activity_logs', 'payments', 'invoices', 
             'tasks', 'services', 'projects', 'clients', 'admin'
         ];
         foreach ($tablesToDrop as $table) {
@@ -66,21 +66,71 @@ function createTables(): string
         ) ENGINE=InnoDB");
         addStatus("success", "clients", "Table 'clients' OK.");
 
-        // 3. Projects
+        // 3. Packs (templates, independent from projects)
+        $conn->exec("CREATE TABLE IF NOT EXISTS packs (
+            id               INT AUTO_INCREMENT PRIMARY KEY,
+            name             VARCHAR(255) NOT NULL,
+            description      TEXT,
+            total_price      DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB");
+        addStatus("success", "packs", "Table 'packs' OK.");
+
+        // 4. Pack Services (services inside a pack)
+        $conn->exec("CREATE TABLE IF NOT EXISTS pack_services (
+            id               INT AUTO_INCREMENT PRIMARY KEY,
+            pack_id          INT NOT NULL,
+            name             VARCHAR(255) NOT NULL,
+            description      TEXT,
+            price            DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (pack_id) REFERENCES packs(id) ON DELETE CASCADE,
+            INDEX (pack_id)
+        ) ENGINE=InnoDB");
+        addStatus("success", "pack_services", "Table 'pack_services' OK.");
+
+        // TRIGGER: Auto-update pack.total_price when pack_services change
+        foreach (['INSERT', 'UPDATE', 'DELETE'] as $event) {
+            $ref    = ($event === 'DELETE') ? 'OLD' : 'NEW';
+            $suffix = strtolower($event);
+            $conn->exec("DROP TRIGGER IF EXISTS after_{$suffix}_pack_service_price");
+            $conn->exec("
+                CREATE TRIGGER after_{$suffix}_pack_service_price
+                AFTER {$event} ON pack_services
+                FOR EACH ROW
+                BEGIN
+                    UPDATE packs 
+                    SET total_price = (
+                        SELECT IFNULL(SUM(price), 0) 
+                        FROM pack_services 
+                        WHERE pack_id = {$ref}.pack_id
+                    )
+                    WHERE id = {$ref}.pack_id;
+                END
+            ");
+        }
+        addStatus("success", "triggers_pack_services", "Triggers on pack_services (total_price) OK.");
+
+        // 5. Projects (with optional pack_id)
         $conn->exec("CREATE TABLE IF NOT EXISTS projects (
             id               INT AUTO_INCREMENT PRIMARY KEY,
             name             VARCHAR(255) NOT NULL,
             description      TEXT,
             start_date       DATE,
             end_date         DATE,
-            status           ENUM('pending', 'in_progress', 'completed', 'cancelled') NOT NULL DEFAULT 'pending',
+            status           ENUM('pending', 'in_progress', 'completed', 'cancelled', 'overdue') NOT NULL DEFAULT 'pending',
             total_cost       DECIMAL(10,2) NOT NULL DEFAULT 0.00,
             remaining_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
             client_id        INT NOT NULL,
+            pack_id          INT NULL,
             created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT,
-            INDEX (status)
+            FOREIGN KEY (pack_id) REFERENCES packs(id) ON DELETE SET NULL,
+            INDEX (status),
+            INDEX (pack_id)
         ) ENGINE=InnoDB");
         addStatus("success", "projects", "Table 'projects' OK.");
 
@@ -303,11 +353,12 @@ function createTables(): string
         ) ENGINE=InnoDB");
         addStatus("success", "notifications", "Table 'notifications' OK.");
 
-
-        // CLEANUP: Drop old subtask tables
+        // CLEANUP: Drop old tables
         $conn->exec("DROP TABLE IF EXISTS work_logs");
         $conn->exec("DROP TABLE IF EXISTS tache");
-        addStatus("success", "cleanup", "Legacy subtask tables dropped.");
+        $conn->exec("DROP TABLE IF EXISTS offers");
+        $conn->exec("DROP TABLE IF EXISTS offer_servers");
+        addStatus("success", "cleanup", "Legacy tables dropped.");
 
     } catch (PDOException $e) {
         addStatus("error", "general", "Process Error : " . $e->getMessage());

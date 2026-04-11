@@ -11,8 +11,31 @@ class Project
         $this->sql = new Sql();
     }
 
+    public function autoUpdateStatuses()
+    {
+        // 1. Update projects to 'in_progress' if start_date has arrived and status is 'pending'
+        $this->sql->update("
+            UPDATE projects 
+            SET status = 'in_progress' 
+            WHERE status = 'pending' 
+            AND start_date IS NOT NULL 
+            AND start_date <= CURRENT_DATE()
+        ");
+
+        // 2. Update projects to 'overdue' if end_date has passed and they are not 'completed' or 'cancelled'
+        $this->sql->update("
+            UPDATE projects 
+            SET status = 'overdue' 
+            WHERE status NOT IN ('completed', 'cancelled') 
+            AND end_date IS NOT NULL 
+            AND end_date < CURRENT_DATE()
+        ");
+    }
+
     public function getAll()
     {
+        $this->autoUpdateStatuses();
+
         return $this->sql->getAll("
             SELECT p.*, c.name as client_name
             FROM projects p 
@@ -23,6 +46,8 @@ class Project
 
     public function show($id)
     {
+        $this->autoUpdateStatuses();
+
         require_once __DIR__ . '/Tasks.php';
         $tasksController = new Tasks();
         $tasksController->autoUpdateStatuses();
@@ -61,10 +86,12 @@ class Project
         try {
             $pdo->beginTransaction();
 
+            $pack_id = !empty($data['pack_id']) ? (int)$data['pack_id'] : null;
+
             // 1. Create Project
             $stmt = $pdo->prepare("
-                INSERT INTO projects (name, description, start_date, end_date, client_id, status) 
-                VALUES (:name, :description, :start_date, :end_date, :client_id, :status)
+                INSERT INTO projects (name, description, start_date, end_date, client_id, pack_id, status) 
+                VALUES (:name, :description, :start_date, :end_date, :client_id, :pack_id, :status)
             ");
             
             $stmt->execute([
@@ -73,11 +100,33 @@ class Project
                 ':start_date' => $data['start_date'] ?? null,
                 ':end_date' => $data['end_date'] ?? null,
                 ':client_id' => (int)$data['client_id'],
+                ':pack_id' => $pack_id,
                 ':status' => $data['status'] ?? 'pending'
             ]);
 
             $projectId = $pdo->lastInsertId();
 
+            // 2. If pack_id is provided, copy pack services to the project's services
+            if ($pack_id) {
+                $stmtGetServices = $pdo->prepare("SELECT * FROM pack_services WHERE pack_id = :pack_id");
+                $stmtGetServices->execute([':pack_id' => $pack_id]);
+                $services = $stmtGetServices->fetchAll(PDO::FETCH_ASSOC);
+
+                if ($services) {
+                    $stmtInsertService = $pdo->prepare("
+                        INSERT INTO services (project_id, name, price, status) 
+                        VALUES (:project_id, :name, :price, 'pending')
+                    ");
+
+                    foreach ($services as $service) {
+                        $stmtInsertService->execute([
+                            ':project_id' => $projectId,
+                            ':name' => $service['name'],
+                            ':price' => $service['price']
+                        ]);
+                    }
+                }
+            }
 
             $pdo->commit();
             return ['success' => true, 'id' => $projectId];

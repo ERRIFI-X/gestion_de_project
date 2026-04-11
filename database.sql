@@ -29,14 +29,17 @@ CREATE TABLE IF NOT EXISTS projects (
     description      TEXT,
     start_date       DATE,
     end_date         DATE,
-    status           ENUM('pending', 'in_progress', 'completed', 'cancelled') NOT NULL DEFAULT 'pending',
+    status           ENUM('pending', 'in_progress', 'completed', 'cancelled', 'overdue') NOT NULL DEFAULT 'pending',
     total_cost       DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     remaining_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     client_id        INT NOT NULL,
+    pack_id          INT NULL,
     created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT,
+    FOREIGN KEY (pack_id) REFERENCES packs(id) ON DELETE SET NULL,
     INDEX (client_id),
+    INDEX (pack_id),
     INDEX (status)
 ) ENGINE=InnoDB;
 
@@ -49,7 +52,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     start_date  DATE,
     end_date    DATE,
     priority    ENUM('low', 'medium', 'high', 'urgent') NOT NULL DEFAULT 'medium',
-    status      ENUM('todo', 'in_progress', 'done') NOT NULL DEFAULT 'todo',
+    status      ENUM('todo', 'in_progress', 'done', 'overdue') NOT NULL DEFAULT 'todo',
     total_hours DECIMAL(8,2)  NOT NULL DEFAULT 0.00,
     total_cost  DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -198,4 +201,27 @@ CREATE TABLE IF NOT EXISTS servers (
     description TEXT,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     INDEX (project_id)
+) ENGINE=InnoDB;
+
+-- 10. Packs (templates, independent from projects)
+CREATE TABLE IF NOT EXISTS packs (
+    id               INT AUTO_INCREMENT PRIMARY KEY,
+    name             VARCHAR(255) NOT NULL,
+    description      TEXT,
+    total_price      DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- 11. Pack Services (services inside a pack)
+CREATE TABLE IF NOT EXISTS pack_services (
+    id               INT AUTO_INCREMENT PRIMARY KEY,
+    pack_id          INT NOT NULL,
+    name             VARCHAR(255) NOT NULL,
+    description      TEXT,
+    price            DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (pack_id) REFERENCES packs(id) ON DELETE CASCADE,
+    INDEX (pack_id)
 ) ENGINE=InnoDB;

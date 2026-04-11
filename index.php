@@ -59,6 +59,9 @@ switch ($page) {
     case 'notifications':
         require_once './routes/Notifications.php';
         break;
+    case 'packs':
+        require_once './routes/Packs.php';
+        break;
     case 'servers':
         require_once './routes/Servers.php';
         break;
