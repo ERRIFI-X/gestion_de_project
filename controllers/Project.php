@@ -32,17 +32,25 @@ class Project
         ");
     }
 
-    public function getAll()
+    public function getAll($clientId = null)
     {
         $this->autoUpdateStatuses();
 
-        return $this->sql->getAll("
-            SELECT p.*, c.name as client_name
-            FROM projects p 
-            JOIN clients c ON p.client_id = c.id 
-            ORDER BY p.created_at DESC
-        ");
+        $sql = "SELECT p.*, c.name as client_name
+                FROM projects p 
+                JOIN clients c ON p.client_id = c.id";
+        $params = [];
+
+        if ($clientId) {
+            $sql .= " WHERE p.client_id = :client_id";
+            $params['client_id'] = $clientId;
+        }
+
+        $sql .= " ORDER BY p.created_at DESC";
+
+        return $this->sql->getAll($sql, $params);
     }
+
 
     public function show($id)
     {

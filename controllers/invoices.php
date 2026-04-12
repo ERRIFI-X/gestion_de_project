@@ -5,15 +5,29 @@ require_once __DIR__ . '/../models/Sql.php';
 
 class Invoices
 {
-    public function getAll()
+    public function getAll($clientId = null)
     {
         $sql = new Sql();
-        $invoices = $sql->getAll("SELECT * FROM invoices");
+        $query = "SELECT i.*, p.name as project_name, c.name as client_name 
+                  FROM invoices i
+                  JOIN projects p ON i.project_id = p.id
+                  JOIN clients c ON i.client_id = c.id";
+        $params = [];
+
+        if ($clientId) {
+            $query .= " WHERE i.client_id = :client_id";
+            $params['client_id'] = $clientId;
+        }
+
+        $query .= " ORDER BY i.created_at DESC";
+        
+        $invoices = $sql->getAll($query, $params);
         return [
             'success' => true,
             'data' => $invoices
         ];
     }
+
 
     public function getById($id)
     {

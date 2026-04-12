@@ -13,16 +13,24 @@ class Finance
 
     // --- Invoices Methods ---
 
-    public function getAllInvoices()
+    public function getAllInvoices($clientId = null)
     {
-        return $this->sql->getAll("
-            SELECT i.*, c.name as client_name, p.name as project_name 
-            FROM invoices i 
-            JOIN clients c ON i.client_id = c.id 
-            JOIN projects p ON i.project_id = p.id 
-            ORDER BY i.created_at DESC
-        ");
+        $sql = "SELECT i.*, c.name as client_name, p.name as project_name 
+                FROM invoices i 
+                JOIN clients c ON i.client_id = c.id 
+                JOIN projects p ON i.project_id = p.id";
+        $params = [];
+
+        if ($clientId) {
+            $sql .= " WHERE i.client_id = :client_id";
+            $params['client_id'] = $clientId;
+        }
+
+        $sql .= " ORDER BY i.created_at DESC";
+
+        return $this->sql->getAll($sql, $params);
     }
+
 
     public function getInvoice($id)
     {

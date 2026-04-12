@@ -47,28 +47,55 @@ class Auth
         $username = $data['username'] ?? '';
         $password = $data['password'] ?? '';
 
+        // 1. Check Admin Table
         $admin = $this->sql->getId("SELECT * FROM admin WHERE username = :username", ['username' => $username]);
-
         if ($admin && password_verify($password, $admin['password'])) {
             $payload = [
                 'id' => $admin['id'],
                 'username' => $admin['username'],
                 'name' => $admin['name'],
+                'role' => 'admin',
                 'exp' => time() + (24 * 60 * 60) // 24 hours
             ];
             $token = JwtHelper::encode($payload);
             return [
                 'success' => true,
-                'message' => 'Login successful',
+                'message' => 'Connexion réussie (Admin)',
                 'token' => $token,
                 'user' => [
                     'id' => $admin['id'],
                     'username' => $admin['username'],
-                    'name' => $admin['name']
+                    'name' => $admin['name'],
+                    'role' => 'admin'
                 ]
             ];
         }
 
-        return ['success' => false, 'error' => 'Invalid credentials.'];
+        // 2. Check Clients Table
+        $client = $this->sql->getId("SELECT * FROM clients WHERE username = :username OR email = :username", ['username' => $username]);
+        if ($client && $client['password'] && password_verify($password, $client['password'])) {
+            $payload = [
+                'id' => $client['id'],
+                'username' => $client['username'] ?? $client['email'],
+                'name' => $client['name'],
+                'role' => 'client',
+                'exp' => time() + (24 * 60 * 60) // 24 hours
+            ];
+            $token = JwtHelper::encode($payload);
+            return [
+                'success' => true,
+                'message' => 'Connexion réussie (Client)',
+                'token' => $token,
+                'user' => [
+                    'id' => $client['id'],
+                    'username' => $client['username'] ?? $client['email'],
+                    'name' => $client['name'],
+                    'role' => 'client'
+                ]
+            ];
+        }
+
+        return ['success' => false, 'error' => 'Identifiants invalides.'];
     }
+
 }

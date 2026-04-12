@@ -57,14 +57,18 @@ function createTables(): string
         $conn->exec("CREATE TABLE IF NOT EXISTS clients (
             id         INT AUTO_INCREMENT PRIMARY KEY,
             name       VARCHAR(255) NOT NULL,
+            username   VARCHAR(100) UNIQUE,
+            password   VARCHAR(255),
             phone      VARCHAR(50),
             email      VARCHAR(255) NOT NULL UNIQUE,
             address    TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX (username),
             INDEX (email)
         ) ENGINE=InnoDB");
         addStatus("success", "clients", "Table 'clients' OK.");
+
 
         // 3. Packs (templates, independent from projects)
         $conn->exec("CREATE TABLE IF NOT EXISTS packs (

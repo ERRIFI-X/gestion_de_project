@@ -28,17 +28,21 @@ class Clients
             return ['success' => false, 'errors' => $errors];
         }
 
+        $password = !empty($data['password']) ? password_hash($data['password'], PASSWORD_BCRYPT) : null;
+
         $result = $this->sql->create(
-            "INSERT INTO clients (name, phone, email, address) VALUES (:name, :phone, :email, :address)",
+            "INSERT INTO clients (name, username, password, phone, email, address) VALUES (:name, :username, :password, :phone, :email, :address)",
             [
                 ':name' => htmlspecialchars(trim($data['name'])),
+                ':username' => htmlspecialchars(trim($data['username'] ?? '')),
+                ':password' => $password,
                 ':phone' => htmlspecialchars(trim($data['phone'] ?? '')),
                 ':email' => htmlspecialchars(trim($data['email'])),
                 ':address' => htmlspecialchars(trim($data['address'] ?? ''))
             ]
         );
 
-        return $result ? ['success' => true, 'id' => $result] : ['success' => false, 'error' => 'Failed to create client'];
+        return $result ? ['success' => true, 'id' => $result] : ['success' => false, 'error' => 'Échec de la création du client'];
     }
 
     public function update($id, $data)
@@ -48,19 +52,27 @@ class Clients
             return ['success' => false, 'errors' => $errors];
         }
 
-        $result = $this->sql->update(
-            "UPDATE clients SET name = :name, phone = :phone, email = :email, address = :address WHERE id = :id",
-            [
-                ':id' => $id,
-                ':name' => htmlspecialchars(trim($data['name'])),
-                ':phone' => htmlspecialchars(trim($data['phone'] ?? '')),
-                ':email' => htmlspecialchars(trim($data['email'])),
-                ':address' => htmlspecialchars(trim($data['address'] ?? ''))
-            ]
-        );
+        $sql = "UPDATE clients SET name = :name, username = :username, phone = :phone, email = :email, address = :address";
+        $params = [
+            ':id' => $id,
+            ':name' => htmlspecialchars(trim($data['name'])),
+            ':username' => htmlspecialchars(trim($data['username'] ?? '')),
+            ':phone' => htmlspecialchars(trim($data['phone'] ?? '')),
+            ':email' => htmlspecialchars(trim($data['email'])),
+            ':address' => htmlspecialchars(trim($data['address'] ?? ''))
+        ];
+
+        if (!empty($data['password'])) {
+            $sql .= ", password = :password";
+            $params[':password'] = password_hash($data['password'], PASSWORD_BCRYPT);
+        }
+
+        $sql .= " WHERE id = :id";
+        $result = $this->sql->update($sql, $params);
 
         return ['success' => $result];
     }
+
 
     public function delete($id)
     {
@@ -77,11 +89,12 @@ class Clients
     private function validate($data, $id = null)
     {
         $errors = [];
-        if (empty($data['name'])) $errors[] = "Name is required.";
+        if (empty($data['name'])) $errors[] = "Le nom est requis.";
+        
         if (empty($data['email'])) {
-            $errors[] = "Email is required.";
+            $errors[] = "L'email est requis.";
         } elseif (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
-            $errors[] = "Invalid email format.";
+            $errors[] = "Format d'email invalide.";
         } else {
             // Check for duplicate email
             $sql = "SELECT id FROM clients WHERE email = :email";
@@ -91,9 +104,24 @@ class Clients
                 $params[':id'] = $id;
             }
             if ($this->sql->getId($sql, $params)) {
-                $errors[] = "Email already in use.";
+                $errors[] = "L'email est déjà utilisé.";
             }
         }
+
+        // Check for duplicate username
+        if (!empty($data['username'])) {
+            $sql = "SELECT id FROM clients WHERE username = :username";
+            $params = [':username' => $data['username']];
+            if ($id) {
+                $sql .= " AND id != :id";
+                $params[':id'] = $id;
+            }
+            if ($this->sql->getId($sql, $params)) {
+                $errors[] = "Le nom d'utilisateur est déjà utilisé.";
+            }
+        }
+
         return $errors;
     }
+
 }
